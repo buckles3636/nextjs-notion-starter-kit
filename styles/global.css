@@ -60,3 +60,6 @@ body {
 ::-webkit-scrollbar-track {           
     background-color: var(--bg-color);
 }
+
+.styles_copyright__nhL_k span
+{display:none;}
