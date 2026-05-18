@@ -1,4 +1,4 @@
-import { getAllPagesInSpace, uuidToId, getPageProperty } from 'notion-utils'
+import { getAllPagesInSpace, getPageProperty, uuidToId } from 'notion-utils'
 import pMemoize from 'p-memoize'
 
 import * as config from './config'
@@ -9,7 +9,20 @@ import { notion } from './notion-api'
 
 const uuid = !!includeNotionIdInUrls
 
+let siteMapPromise: Promise<types.SiteMap> | null = null
+
 export async function getSiteMap(): Promise<types.SiteMap> {
+  if (!siteMapPromise) {
+    siteMapPromise = createSiteMap().catch((err) => {
+      siteMapPromise = null
+      throw err
+    })
+  }
+
+  return siteMapPromise
+}
+
+async function createSiteMap(): Promise<types.SiteMap> {
   const partialSiteMap = await getAllPages(
     config.rootNotionPageId,
     config.rootNotionSpaceId
@@ -31,24 +44,28 @@ async function getAllPagesImpl(
 ): Promise<Partial<types.SiteMap>> {
   const getPage = async (pageId: string, ...args) => {
     console.log('\nnotion getPage', uuidToId(pageId))
-    return notion.getPage(pageId, ...args)
+    return notion.getPage(pageId, { ...args[0], concurrency: 1 })
   }
 
   const pageMap = await getAllPagesInSpace(
     rootNotionPageId,
     rootNotionSpaceId,
-    getPage
+    getPage,
+    { concurrency: 1 }
   )
 
   const canonicalPageMap = Object.keys(pageMap).reduce(
     (map, pageId: string) => {
       const recordMap = pageMap[pageId]
       if (!recordMap) {
-        throw new Error(`Error loading page "${pageId}"`)
+        console.warn(`Error loading page "${pageId}"`)
+        return map
       }
 
       const block = recordMap.block[pageId]?.value
-      if (!(getPageProperty<boolean|null>('Public', block, recordMap) ?? true)) {
+      if (
+        !(getPageProperty<boolean | null>('Public', block, recordMap) ?? true)
+      ) {
         return map
       }
 
